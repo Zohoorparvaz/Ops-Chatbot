@@ -149,23 +149,6 @@ if user_question:
 # In[6]:
 
 
-import nbformat
-from nbconvert import PythonExporter
-
-# Load your notebook
-with open("3 Chat2.ipynb", "r", encoding="utf-8") as f:
-    notebook_content = nbformat.read(f, as_version=4)
-
-# Convert to Python script
-python_exporter = PythonExporter()
-python_script, _ = python_exporter.from_notebook_node(notebook_content)
-
-# Save to .py file
-with open("Chat2.py", "w", encoding="utf-8") as f:
-    f.write(python_script)
-
-print("✅ Notebook converted to Chat2.py")
-
 
 # In[ ]:
 
