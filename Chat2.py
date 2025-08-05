@@ -210,6 +210,23 @@ if st.session_state.chat_log:
 
 # In[5]:
 
+# 👇 Add the logo here
+st.image("bird-logo-RGB.jpg", width=300)
+
+st.title("📘 Operations Manual Chatbot Assistant")
+st.write("Ask questions about your internal documentation.")
+
+user_question = st.text_input("🔎 Enter your question:", placeholder="e.g., Tell me about safety procedures")
+
+if user_question:
+    with st.spinner("Retrieving relevant chunks..."):
+        context = retrieve_chunks_np(user_question)
+
+    with st.spinner("Generating answer..."):
+        answer = generate_answer_from_context(context, user_question)
+
+    st.subheader("📄 Answer")
+    st.write(answer)
 
 
 
