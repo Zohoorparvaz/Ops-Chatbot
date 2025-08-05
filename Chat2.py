@@ -118,7 +118,7 @@ Your job:
 3. Do **not** make up links. Only include a link if the name and URL appear in the context or are clearly stated.
 4. Organize your answer using clear bullet points or numbers.
 5. Prioritize helping the user **find what to click on** to take action.
-6. Each time you retrieve a section display the relevant Forms, Other references and references. For example if you grab a section in section 15 display all of sections 15.10 Forms and 15.11 Other References 
+6. Display all relevant FORMS, OTHER REFERENCES AND REFERENCES at the end of the answer 
 
 Context:
 {context}
