@@ -172,6 +172,11 @@ import streamlit as st
 
 # === UI Settings ===
 st.set_page_config(page_title="Operations Manual Assistant", layout="wide")
+
+# === Logo ===
+st.image("bird-logo-RGB.jpg", width=300)
+
+# === Page Title and Description ===
 st.title("📘 RAG Chatbot Assistant")
 st.write("Ask questions about your internal documentation.")
 
@@ -180,7 +185,11 @@ if "chat_log" not in st.session_state:
     st.session_state.chat_log = []  # Each item: {"user": ..., "response": ...}
 
 # === Question Input ===
-user_question = st.text_input("🔎 Enter your question:", placeholder="e.g., Tell me about safety procedures")
+user_question = st.text_input(
+    "🔎 Enter your question:",
+    placeholder="e.g., Tell me about safety procedures",
+    key="main_question_input"
+)
 
 if user_question:
     with st.spinner("🔍 Retrieving relevant chunks..."):
@@ -206,28 +215,6 @@ if st.session_state.chat_log:
         st.markdown(f"**You:** {entry['user']}")
         st.markdown(f"**Assistant:** {entry['response']}")
         st.markdown("---")
-
-
-# In[5]:
-
-# 👇 Add the logo here
-st.image("bird-logo-RGB.jpg", width=300)
-
-st.title("📘 Operations Manual Chatbot Assistant")
-st.write("Ask questions about your internal documentation.")
-
-user_question = st.text_input("🔎 Enter your question:", placeholder="e.g., Tell me about safety procedures")
-
-if user_question:
-    with st.spinner("Retrieving relevant chunks..."):
-        context = retrieve_chunks_np(user_question)
-
-    with st.spinner("Generating answer..."):
-        answer = generate_answer_from_context(context, user_question)
-
-    st.subheader("📄 Answer")
-    st.write(answer)
-
 
 
 
