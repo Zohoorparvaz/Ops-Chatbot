@@ -10,7 +10,6 @@ my_api_key = st.secrets["my_api_key"]
 user_question = "Tell me about safety procedures"
 
 
-# In[4]:
 
 
 import pickle, faiss, numpy as np
@@ -35,7 +34,7 @@ chat_model = "o4-mini"                 # your chat model deployment
 
 
 # === Function: retrieve relevant chunks using cosine similarity ===
-def retrieve_chunks_np(user_question, k=5):
+def retrieve_chunks_np(user_question, k=15):
     print(f"💬 Question: {user_question}")
     
     # Step 1: Embed the question
@@ -86,67 +85,133 @@ def retrieve_chunks_np(user_question, k=5):
 
 
 
+# === Initialize chat log ===
+# === Chat history ===
+chat_log = []
+
+# === Function: Retrieve top-k chunks using cosine similarity ===
+def retrieve_chunks_np(user_question, k=15):
+    print(f"💬 Question: {user_question}")
+    query = client.embeddings.create(
+        input=user_question,
+        model=embedding_model
+    ).data[0].embedding
+    query = np.array(query, dtype="float32")
+    matrix_norm = embedding_matrix / np.linalg.norm(embedding_matrix, axis=1, keepdims=True)
+    query_norm = query / np.linalg.norm(query)
+    similarities = np.dot(matrix_norm, query_norm)
+    top_k_idx = np.argsort(similarities)[-k:][::-1]
+    top_chunks = [text_chunks[i] for i in top_k_idx]
+    print("✅ Retrieved top", k, "chunks.")
+    return "\n\n".join(top_chunks)
+
+# === Function: Generate answer with chat history ===
 def generate_answer_from_context(context, user_question):
     print("💡 Sending context to Azure OpenAI...")
 
     prompt = f"""
-You are a highly structured and detail-oriented assistant. Your job is to extract and summarize internal operation manuals to help employees quickly understand procedures, rules, and responsibilities.
+You are a highly structured and detail-oriented assistant who helps employees locate and understand company procedures, sections, and forms from internal documentation. 
 
-Given the following context from an operations manual, answer the user question clearly, with step-by-step detail if applicable. Use numbered or bulleted lists when appropriate. If any links are mentioned, always include the full clickable hyperlink using Markdown format: `[Link Text](URL)`.
+Your job:
+1. Summarize the relevant information clearly.
+2. If any **forms, section numbers, or document titles** are mentioned in the context, and they appear to have associated links, include them using **Markdown hyperlinks** like: [Tour Waiver](https://link.com).
+3. Do **not** make up links. Only include a link if the name and URL appear in the context or are clearly stated.
+4. Organize your answer using clear bullet points or numbers.
+5. Prioritize helping the user **find what to click on** to take action.
+6. Each time you retrieve a section display the relevant Forms, Other references and references. For example if you grab a section in section 15 display all of sections 15.10 Forms and 15.11 Other References 
 
 Context:
 {context}
 
 Question: {user_question}
 
-Answer:"""
+Answer:
+"""
 
-    response = client.chat.completions.create(
-        model=chat_model,
-        messages=[
-            {"role": "system", "content": "You are a professional assistant that extracts and summarizes step-by-step procedures from internal manuals. Focus on clarity and structure."},
-            {"role": "user", "content": prompt}
-        ],
-        max_completion_tokens=5000
-    )
+    # Build full message history (last 3 turns)
+    messages = [
+        {"role": "system", "content": "You are a link-aware internal assistant. Prioritize clarity and actionable hyperlinks when answering questions about procedures or forms."}
+    ]
+    for chat in chat_log[-3:]:
+        messages.append({"role": "user", "content": chat["user"]})
+        messages.append({"role": "assistant", "content": chat["response"]})
+    
+    messages.append({"role": "user", "content": prompt})
 
-    answer = response.choices[0].message.content.strip()
-    print("🤖 Answer:\n", answer)
-    return answer
+    try:
+        response = client.chat.completions.create(
+            model=chat_model,
+            messages=messages,
+            max_completion_tokens=5000
+        )
+        answer = response.choices[0].message.content.strip()
+        print("🤖 Answer:\n", answer)
 
-#generate_answer_from_context(context, user_question)
+        # Save this exchange to memory
+        chat_log.append({
+            "user": user_question,
+            "context": context,
+            "response": answer
+        })
+
+        return answer
+
+    except Exception as e:
+        print("❌ Exception during model call:", e)
+        return f"Model error: {e}"
+
+
+
+
+
+
+# In[4]:
+
+
+import streamlit as st
+
+# === UI Settings ===
+st.set_page_config(page_title="Operations Manual Assistant", layout="wide")
+st.title("📘 RAG Chatbot Assistant")
+st.write("Ask questions about your internal documentation.")
+
+# === Session State for chat memory ===
+if "chat_log" not in st.session_state:
+    st.session_state.chat_log = []  # Each item: {"user": ..., "response": ...}
+
+# === Question Input ===
+user_question = st.text_input("🔎 Enter your question:", placeholder="e.g., Tell me about safety procedures")
+
+if user_question:
+    with st.spinner("🔍 Retrieving relevant chunks..."):
+        context = retrieve_chunks_np(user_question)
+
+    with st.spinner("🤖 Generating answer..."):
+        answer = generate_answer_from_context(context, user_question)
+
+    # === Save to memory ===
+    st.session_state.chat_log.append({
+        "user": user_question,
+        "response": answer
+    })
+
+    # === Display Answer ===
+    st.subheader("📄 Answer")
+    st.write(answer)
+
+# === Chat History Display ===
+if st.session_state.chat_log:
+    st.subheader("💬 Chat History")
+    for entry in reversed(st.session_state.chat_log):
+        st.markdown(f"**You:** {entry['user']}")
+        st.markdown(f"**Assistant:** {entry['response']}")
+        st.markdown("---")
 
 
 # In[5]:
 
 
 
-
-# === Streamlit UI ===
-import streamlit as st
-
-# === Streamlit UI ===
-st.set_page_config(page_title="Operations Manual Assistant", layout="wide")
-
-# 👇 Add the logo here
-st.image("bird-logo-RGB.jpg", width=300)
-
-st.title("📘 Operations Manual Chatbot Assistant")
-st.write("Ask questions about your internal documentation.")
-
-user_question = st.text_input("🔎 Enter your question:", placeholder="e.g., Tell me about safety procedures")
-
-if user_question:
-    with st.spinner("Retrieving relevant chunks..."):
-        context = retrieve_chunks_np(user_question)
-
-    with st.spinner("Generating answer..."):
-        answer = generate_answer_from_context(context, user_question)
-
-    st.subheader("📄 Answer")
-    st.write(answer)
-
-# In[ ]:
 
 
 
