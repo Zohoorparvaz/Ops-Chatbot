@@ -6,6 +6,6 @@ pandas
 nbformat
 nbconvert
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
 
