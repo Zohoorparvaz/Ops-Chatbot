@@ -8,3 +8,4 @@ nbconvert
 fastapi
 uvicorn
 python-dotenv
+
