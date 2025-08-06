@@ -118,7 +118,7 @@ Your job:
 3. Do **not** make up links. Only include a link if the name and URL appear in the context or are clearly stated.
 4. Organize your answer using clear bullet points or numbers.
 5. Prioritize helping the user **find what to click on** to take action.
-6. Display all relevant FORMS, OTHER REFERENCES AND REFERENCES at the end of the answer 
+6. Display all sections and topics that you retreive. For example Safety, project planning, or Change Control 
 
 Context:
 {context}
