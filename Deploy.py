@@ -1,7 +1,5 @@
 # app.py
 
-#Test
-
 from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
 import pickle, faiss, numpy as np
@@ -88,23 +86,20 @@ Answer:
     chat_log.append({"user": user_question, "context": context, "response": answer})
     return answer
 
-# === Your existing direct API route (keep it) ===
+# === Direct API route ===
 @app.post("/chat")
 async def chat_with_bot(request: ChatRequest):
     context = retrieve_chunks_np(request.question)
     answer = generate_answer_from_context(context, request.question)
     return {"answer": answer}
 
-# ==== NEW: Bot Framework adapter + /api/messages route ====
-
-# Bot credentials from Azure Bot (set in App Service → Configuration → Application settings)
+# ==== Bot Framework adapter + /api/messages route ====
 APP_ID = os.getenv("MICROSOFT_APP_ID", "")
 APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
 
 adapter = BotFrameworkAdapter(app_id=APP_ID, app_password=APP_PASSWORD)
 
 async def on_turn(turn_context: TurnContext):
-    # Handle only message activities for now
     if turn_context.activity.type == ActivityTypes.message:
         user_question = (turn_context.activity.text or "").strip()
         if not user_question:
@@ -114,7 +109,6 @@ async def on_turn(turn_context: TurnContext):
         answer = generate_answer_from_context(context, user_question)
         await turn_context.send_activity(answer)
     else:
-        # Acknowledge non-message events to avoid silence in Web Chat/Teams
         await turn_context.send_activity(f"Received: {turn_context.activity.type}")
 
 @app.post("/api/messages")
@@ -124,6 +118,12 @@ async def messages(request: Request):
     auth_header = request.headers.get("Authorization", "")
     await adapter.process_activity(activity, auth_header, on_turn)
     return Response(status_code=200)
+
+# === Auto-start when run directly ===
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
 
 
 
