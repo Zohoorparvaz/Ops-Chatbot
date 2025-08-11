@@ -120,10 +120,14 @@ async def messages(request: Request):
     return Response(status_code=200)
 
 # === Auto-start when run directly ===
+# === Auto-start when run directly ===
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app:app", host="0.0.0.0", port=port)
+    # The first "Deploy" here must match your filename (Deploy.py)
+    # The second "app" is your FastAPI instance variable
+    uvicorn.run("Deploy:app", host="0.0.0.0", port=port)
+
 
 
 
