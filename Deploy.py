@@ -1,10 +1,14 @@
 # app.py
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
 import pickle, faiss, numpy as np
 from openai import AzureOpenAI
 import os
+
+# ==== NEW: Bot Framework imports ====
+from botbuilder.core import BotFrameworkAdapter, TurnContext
+from botbuilder.schema import Activity, ActivityTypes
 
 # === FastAPI app ===
 app = FastAPI()
@@ -19,7 +23,7 @@ with open("embeddings.pkl", "rb") as f:
 client = AzureOpenAI(
     api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
     api_version="2024-12-01-preview",
-    azure_endpoint="https://aaron-mb5yqktn-eastus2.cognitiveservices.azure.com/"
+    azure_endpoint="https://aaron-mb5yqktn-eastus2.cognitiveservices.azure.com/",
 )
 embedding_model = "text-embedding-3-small"
 chat_model = "o4-mini"
@@ -35,7 +39,7 @@ chat_log = []
 def retrieve_chunks_np(user_question, k=15):
     query = client.embeddings.create(
         input=user_question,
-        model=embedding_model
+        model=embedding_model,
     ).data[0].embedding
     query = np.array(query, dtype="float32")
     matrix_norm = embedding_matrix / np.linalg.norm(embedding_matrix, axis=1, keepdims=True)
@@ -65,7 +69,6 @@ Question: {user_question}
 
 Answer:
 """
-
     messages = [
         {"role": "system", "content": "You are a link-aware internal assistant. Prioritize clarity and actionable hyperlinks when answering questions about procedures or forms."}
     ]
@@ -77,18 +80,48 @@ Answer:
     response = client.chat.completions.create(
         model=chat_model,
         messages=messages,
-        max_completion_tokens=5000
+        max_completion_tokens=5000,
     )
     answer = response.choices[0].message.content.strip()
     chat_log.append({"user": user_question, "context": context, "response": answer})
     return answer
 
-# === Route ===
+# === Your existing direct API route (keep it) ===
 @app.post("/chat")
 async def chat_with_bot(request: ChatRequest):
     context = retrieve_chunks_np(request.question)
     answer = generate_answer_from_context(context, request.question)
     return {"answer": answer}
+
+# ==== NEW: Bot Framework adapter + /api/messages route ====
+
+# Bot credentials from Azure Bot (set in App Service → Configuration → Application settings)
+APP_ID = os.getenv("MICROSOFT_APP_ID", "")
+APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
+
+adapter = BotFrameworkAdapter(app_id=APP_ID, app_password=APP_PASSWORD)
+
+async def on_turn(turn_context: TurnContext):
+    # Handle only message activities for now
+    if turn_context.activity.type == ActivityTypes.message:
+        user_question = (turn_context.activity.text or "").strip()
+        if not user_question:
+            await turn_context.send_activity("Please type a question.")
+            return
+        context = retrieve_chunks_np(user_question)
+        answer = generate_answer_from_context(context, user_question)
+        await turn_context.send_activity(answer)
+    else:
+        # Acknowledge non-message events to avoid silence in Web Chat/Teams
+        await turn_context.send_activity(f"Received: {turn_context.activity.type}")
+
+@app.post("/api/messages")
+async def messages(request: Request):
+    body = await request.json()
+    activity = Activity().deserialize(body)
+    auth_header = request.headers.get("Authorization", "")
+    await adapter.process_activity(activity, auth_header, on_turn)
+    return Response(status_code=200)
 
 
 
