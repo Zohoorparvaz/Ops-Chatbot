@@ -1,4 +1,4 @@
-# app.py
+# Deploy.py
 
 from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
@@ -6,12 +6,17 @@ import pickle, faiss, numpy as np
 from openai import AzureOpenAI
 import os
 
-# ==== NEW: Bot Framework imports ====
+# ==== Bot Framework imports ====
 from botbuilder.core import BotFrameworkAdapter, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 
 # === FastAPI app ===
 app = FastAPI()
+
+# === Health check for Azure ===
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 # === Load your embedding + chunks ===
 with open("text_chunks.pkl", "rb") as f:
@@ -52,7 +57,7 @@ def retrieve_chunks_np(user_question, k=15):
 # === Answer generation ===
 def generate_answer_from_context(context, user_question):
     prompt = f"""
-You are a highly structured and detail-oriented assistant who helps employees locate and understand company procedures, sections, and forms from internal documentation. 
+You are a highly structured and detail-oriented assistant who helps employees locate and understand company procedures, sections, and forms from internal documentation.
 
 Your job:
 1. Summarize the relevant information clearly.
@@ -60,7 +65,7 @@ Your job:
 3. Do **not** make up links. Only include a link if the name and URL appear in the context or are clearly stated.
 4. Organize your answer using clear bullet points or numbers.
 5. Prioritize helping the user **find what to click on** to take action.
-6. Display all sections and topics that you retrieve. For example Safety, project planning, or Change Control 
+6. Display all sections and topics that you retrieve.
 
 Context:
 {context}
@@ -93,7 +98,7 @@ async def chat_with_bot(request: ChatRequest):
     answer = generate_answer_from_context(context, request.question)
     return {"answer": answer}
 
-# ==== Bot Framework adapter + /api/messages route ====
+# === Bot Framework adapter + /api/messages route ===
 APP_ID = os.getenv("MICROSOFT_APP_ID", "")
 APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
 
@@ -120,15 +125,10 @@ async def messages(request: Request):
     return Response(status_code=200)
 
 # === Auto-start when run directly ===
-# === Auto-start when run directly ===
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    # The first "Deploy" here must match your filename (Deploy.py)
-    # The second "app" is your FastAPI instance variable
     uvicorn.run("Deploy:app", host="0.0.0.0", port=port)
-
-
 
 
 
