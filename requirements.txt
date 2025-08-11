@@ -8,4 +8,5 @@ nbconvert
 fastapi
 uvicorn[standard]
 python-dotenv
-
+botbuilder-core
+botbuilder-schema
