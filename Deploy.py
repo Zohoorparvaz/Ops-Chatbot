@@ -1,22 +1,14 @@
 # Deploy.py
 
-from fastapi import FastAPI, Request, Response
+
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import pickle, faiss, numpy as np
 from openai import AzureOpenAI
 import os
 
-# ==== Bot Framework imports ====
-from botbuilder.core import BotFrameworkAdapter, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
-
 # === FastAPI app ===
 app = FastAPI()
-
-# === Health check for Azure ===
-@app.get("/health")
-async def health_check():
-    return {"status": "ok"}
 
 # === Load your embedding + chunks ===
 with open("text_chunks.pkl", "rb") as f:
@@ -28,7 +20,7 @@ with open("embeddings.pkl", "rb") as f:
 client = AzureOpenAI(
     api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
     api_version="2024-12-01-preview",
-    azure_endpoint="https://aaron-mb5yqktn-eastus2.cognitiveservices.azure.com/",
+    azure_endpoint="https://aaron-mb5yqktn-eastus2.cognitiveservices.azure.com/"
 )
 embedding_model = "text-embedding-3-small"
 chat_model = "o4-mini"
@@ -44,7 +36,7 @@ chat_log = []
 def retrieve_chunks_np(user_question, k=15):
     query = client.embeddings.create(
         input=user_question,
-        model=embedding_model,
+        model=embedding_model
     ).data[0].embedding
     query = np.array(query, dtype="float32")
     matrix_norm = embedding_matrix / np.linalg.norm(embedding_matrix, axis=1, keepdims=True)
@@ -57,7 +49,7 @@ def retrieve_chunks_np(user_question, k=15):
 # === Answer generation ===
 def generate_answer_from_context(context, user_question):
     prompt = f"""
-You are a highly structured and detail-oriented assistant who helps employees locate and understand company procedures, sections, and forms from internal documentation.
+You are a highly structured and detail-oriented assistant who helps employees locate and understand company procedures, sections, and forms from internal documentation. 
 
 Your job:
 1. Summarize the relevant information clearly.
@@ -65,7 +57,7 @@ Your job:
 3. Do **not** make up links. Only include a link if the name and URL appear in the context or are clearly stated.
 4. Organize your answer using clear bullet points or numbers.
 5. Prioritize helping the user **find what to click on** to take action.
-6. Display all sections and topics that you retrieve.
+6. Display all sections and topics that you retrieve. For example Safety, project planning, or Change Control 
 
 Context:
 {context}
@@ -74,6 +66,7 @@ Question: {user_question}
 
 Answer:
 """
+
     messages = [
         {"role": "system", "content": "You are a link-aware internal assistant. Prioritize clarity and actionable hyperlinks when answering questions about procedures or forms."}
     ]
@@ -85,50 +78,16 @@ Answer:
     response = client.chat.completions.create(
         model=chat_model,
         messages=messages,
-        max_completion_tokens=5000,
+        max_completion_tokens=5000
     )
     answer = response.choices[0].message.content.strip()
     chat_log.append({"user": user_question, "context": context, "response": answer})
     return answer
 
-# === Direct API route ===
+# === Route ===
 @app.post("/chat")
 async def chat_with_bot(request: ChatRequest):
     context = retrieve_chunks_np(request.question)
     answer = generate_answer_from_context(context, request.question)
     return {"answer": answer}
-
-# === Bot Framework adapter + /api/messages route ===
-APP_ID = os.getenv("MICROSOFT_APP_ID", "")
-APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
-
-adapter = BotFrameworkAdapter(app_id=APP_ID, app_password=APP_PASSWORD)
-
-async def on_turn(turn_context: TurnContext):
-    if turn_context.activity.type == ActivityTypes.message:
-        user_question = (turn_context.activity.text or "").strip()
-        if not user_question:
-            await turn_context.send_activity("Please type a question.")
-            return
-        context = retrieve_chunks_np(user_question)
-        answer = generate_answer_from_context(context, user_question)
-        await turn_context.send_activity(answer)
-    else:
-        await turn_context.send_activity(f"Received: {turn_context.activity.type}")
-
-@app.post("/api/messages")
-async def messages(request: Request):
-    body = await request.json()
-    activity = Activity().deserialize(body)
-    auth_header = request.headers.get("Authorization", "")
-    await adapter.process_activity(activity, auth_header, on_turn)
-    return Response(status_code=200)
-
-# === Auto-start when run directly ===
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("Deploy:app", host="0.0.0.0", port=port)
-
-
 
