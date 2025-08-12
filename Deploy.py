@@ -111,3 +111,41 @@ async def chat_with_bot(req: ChatRequest):
     except Exception as e:
         # Temporary: surface errors as JSON so the worker doesn't crash during warmup
         return {"error": str(e)}
+
+
+
+
+
+# --- Enable Microsoft Bot Framework / Teams when creds exist ---
+import os
+MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID", "")
+MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
+
+if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
+    from botbuilder.core import BotFrameworkAdapter, TurnContext
+    from botbuilder.schema import Activity, ActivityTypes
+    from fastapi import Request, Response
+
+    adapter = BotFrameworkAdapter(app_id=MICROSOFT_APP_ID, app_password=MICROSOFT_APP_PASSWORD)
+
+    async def on_turn(turn_context: TurnContext):
+        if turn_context.activity.type == ActivityTypes.message:
+            user_q = (turn_context.activity.text or "").strip()
+            if not user_q:
+                await turn_context.send_activity("Please type a question.")
+                return
+            ctx = retrieve_chunks_np(user_q)
+            ans = generate_answer_from_context(ctx, user_q)
+            await turn_context.send_activity(ans)
+        else:
+            # Acknowledge non-message activities
+            await turn_context.send_activity(f"Received activity type: {turn_context.activity.type}")
+
+    @app.post("/api/messages")
+    async def messages(request: Request):
+        body = await request.json()
+        activity = Activity().deserialize(body)
+        auth_header = request.headers.get("Authorization", "")
+        await adapter.process_activity(activity, auth_header, on_turn)
+        return Response(status_code=200)
+
