@@ -94,7 +94,7 @@ Answer:
     resp = client.chat.completions.create(
         model=CHAT_MODEL,
         messages=messages,
-        max_tokens=1200,   # <-- correct kwarg
+        max_completion_tokens=2000,   # <-- correct kwarg
     )
     answer = resp.choices[0].message.content.strip()
     chat_log.append({"user": user_question, "context": context, "response": answer})
