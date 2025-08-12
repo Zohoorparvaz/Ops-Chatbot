@@ -1,5 +1,6 @@
 # Deploy.py
-from fastapi import FastAPI
+# Deploy.py
+from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
 import pickle, numpy as np
 from openai import AzureOpenAI
@@ -7,37 +8,41 @@ import os
 
 app = FastAPI()
 
-# Health check so Azure knows we're alive
+# ---------- Health ----------
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
-# --- Load data ---
-with open("text_chunks.pkl", "rb") as f:
-    text_chunks = pickle.load(f)
-with open("embeddings.pkl", "rb") as f:
-    embedding_matrix = np.array(pickle.load(f), dtype="float32")
-
-# Pre-normalize once (faster, safer)
+# ---------- Lazy-load data ----------
+text_chunks = None
+embedding_matrix_unit = None
 _eps = 1e-12
-row_norms = np.linalg.norm(embedding_matrix, axis=1, keepdims=True) + _eps
-embedding_matrix_unit = embedding_matrix / row_norms
 
-# --- Azure OpenAI ---
-EMBEDDING_MODEL = "text-embedding-3-small"  # your deployment name
-CHAT_MODEL = "o4-mini"                      # your deployment name
+def ensure_loaded():
+    global text_chunks, embedding_matrix_unit
+    if text_chunks is not None and embedding_matrix_unit is not None:
+        return
+    with open("text_chunks.pkl", "rb") as f:
+        tc = pickle.load(f)
+    with open("embeddings.pkl", "rb") as f:
+        em = np.array(pickle.load(f), dtype="float32")
+    row_norms = np.linalg.norm(em, axis=1, keepdims=True) + _eps
+    embedding_matrix_unit = em / row_norms
+    text_chunks = tc
+
+# ---------- Azure OpenAI ----------
+EMBEDDING_MODEL = os.getenv("AOAI_EMBED_DEPLOY", "text-embedding-3-small")
+CHAT_MODEL      = os.getenv("AOAI_CHAT_DEPLOY",  "o4-mini")  # must match your Deployment name
 
 def get_client() -> AzureOpenAI:
     key = os.getenv("AZURE_OPENAI_API_KEY")
-    if not key:
-        raise RuntimeError("AZURE_OPENAI_API_KEY is not set")
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g., https://<resource>.openai.azure.com/
+    if not key or not endpoint:
+        raise RuntimeError("AZURE_OPENAI_API_KEY or AZURE_OPENAI_ENDPOINT not set")
     return AzureOpenAI(
         api_key=key,
         api_version="2024-12-01-preview",
-        azure_endpoint=os.getenv(
-            "AZURE_OPENAI_ENDPOINT",
-            "https://aaron-mb5yqktn-eastus2.cognitiveservices.azure.com/",
-        ),
+        azure_endpoint=endpoint,
     )
 
 class ChatRequest(BaseModel):
@@ -46,6 +51,7 @@ class ChatRequest(BaseModel):
 chat_log = []
 
 def retrieve_chunks_np(user_question: str, k: int = 15) -> str:
+    ensure_loaded()
     client = get_client()
     emb = client.embeddings.create(input=user_question, model=EMBEDDING_MODEL).data[0].embedding
     q = np.array(emb, dtype="float32")
@@ -68,8 +74,8 @@ You are a highly structured and detail-oriented assistant who helps employees lo
 
 Your job:
 1. Summarize the relevant information clearly.
-2. If any forms, section numbers, or document titles are mentioned in the context, and they appear to have associated links, include them using Markdown hyperlinks like: [Tour Waiver](https://link.com).
-3. Do not make up links. Only include a link if the name and URL appear in the context or are clearly stated.
+2. If any forms, section numbers, or document titles are mentioned in the context, and they appear to have associated links, include them using Markdown hyperlinks that are present in the context.
+3. Do not make up links.
 4. Organize your answer using clear bullet points or numbers.
 5. Prioritize helping the user find what to click on to take action.
 6. Display all sections and topics that you retrieve (e.g., Safety, Project Planning, Change Control).
@@ -82,9 +88,7 @@ Question: {user_question}
 Answer:
 """.strip()
 
-    messages = [
-        {"role": "system", "content": "You are a link-aware internal assistant. Prioritize clarity and actionable hyperlinks when answering questions about procedures or forms."}
-    ]
+    messages = [{"role": "system", "content": "You are a link-aware internal assistant. Prioritize clarity and actionable hyperlinks."}]
     for chat in chat_log[-3:]:
         messages.append({"role": "user", "content": chat["user"]})
         messages.append({"role": "assistant", "content": chat["response"]})
@@ -94,7 +98,7 @@ Answer:
     resp = client.chat.completions.create(
         model=CHAT_MODEL,
         messages=messages,
-        max_completion_tokens=2000,   # <-- correct kwarg
+        #max_tokens=2000,  # correct param
     )
     answer = resp.choices[0].message.content.strip()
     chat_log.append({"user": user_question, "context": context, "response": answer})
@@ -109,11 +113,9 @@ async def chat_with_bot(req: ChatRequest):
         answer = generate_answer_from_context(context, req.question)
         return {"answer": answer}
     except Exception as e:
-        # Temporary: surface errors as JSON so the worker doesn't crash during warmup
         return {"error": str(e)}
 
-
-# ---------- Bot Framework (optional; won’t crash startup) ----------
+# ---------- Bot Framework (optional) ----------
 MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID", "")
 MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
 adapter = None
@@ -123,10 +125,7 @@ if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
         from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
         from botbuilder.schema import Activity, ActivityTypes
 
-        settings = BotFrameworkAdapterSettings(
-            app_id=MICROSOFT_APP_ID,
-            app_password=MICROSOFT_APP_PASSWORD,
-        )
+        settings = BotFrameworkAdapterSettings(app_id=MICROSOFT_APP_ID, app_password=MICROSOFT_APP_PASSWORD)
         adapter = BotFrameworkAdapter(settings)
 
         async def on_error(ctx: TurnContext, err: Exception):
@@ -138,9 +137,6 @@ if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
             if turn_context.activity.type == ActivityTypes.message:
                 user_q = (turn_context.activity.text or "").strip()
                 ctx = retrieve_chunks_np(user_q)
-                if _load_err:
-                    await turn_context.send_activity("Server warming up—try again in a minute.")
-                    return
                 ans = generate_answer_from_context(ctx, user_q)
                 await turn_context.send_activity(ans)
             else:
@@ -156,4 +152,5 @@ if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
 
     except Exception as e:
         print(f"[STARTUP] Bot wiring failed: {e}")
-        adapter = None  # keep app alive
+        adapter = None
+
