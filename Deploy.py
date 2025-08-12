@@ -117,62 +117,63 @@ async def chat_with_bot(req: ChatRequest):
 
 # ---------- Bot Framework ----------
 
-import os
-from fastapi import Request, Response, HTTPException
-from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
+# ---------- Teams Personal Tab page (/teams) ----------
+import requests
+from fastapi.responses import HTMLResponse
 
-# Read credentials
-MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID", "").strip()
-MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "").strip()
+DIRECTLINE_SECRET = os.getenv("DIRECTLINE_SECRET", "").strip()  # set in App Service > Configuration
 
-adapter = None
-if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
-    settings = BotFrameworkAdapterSettings(
-        app_id=MICROSOFT_APP_ID,
-        app_password=MICROSOFT_APP_PASSWORD,
+def _create_directline_token():
+    if not DIRECTLINE_SECRET:
+        raise RuntimeError("DIRECTLINE_SECRET not set in environment.")
+    r = requests.post(
+        "https://directline.botframework.com/v3/directline/tokens/generate",
+        headers={"Authorization": f"Bearer {DIRECTLINE_SECRET}"}
     )
-    adapter = BotFrameworkAdapter(settings)
+    r.raise_for_status()
+    return r.json()["token"]
 
-    async def on_error(ctx: TurnContext, err: Exception):
-        print(f"[BOT ERROR] {err}")
-        try:
-            await ctx.send_activity("Sorry — something went wrong.")
-        except Exception:
-            pass
-    adapter.on_turn_error = on_error
-
-    async def on_turn(turn_context: TurnContext):
-        if turn_context.activity.type == ActivityTypes.message:
-            try:
-                user_q = (turn_context.activity.text or "").strip()
-                ctx = retrieve_chunks_np(user_q)  # your retrieval function
-                ans = generate_answer_from_context(ctx, user_q)  # your generation function
-            except Exception as e:
-                print(f"[BOT ERROR] {e}")
-                ans = "Sorry — I ran into a problem processing that."
-            await turn_context.send_activity(ans)
-        else:
-            await turn_context.send_activity(f"Received: {turn_context.activity.type}")
-else:
-    print("[STARTUP] Missing MICROSOFT_APP_ID or MICROSOFT_APP_PASSWORD. Bot auth will fail.")
-
-@app.post("/api/messages")
-async def messages(request: Request):
-    if adapter is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Bot adapter not initialized. Check MICROSOFT_APP_ID / MICROSOFT_APP_PASSWORD."
-        )
-
-    body = await request.json()
-    activity = Activity().deserialize(body)
-    auth_header = request.headers.get("Authorization", "")
-
+@app.get("/teams")
+def teams_tab():
+    """
+    HTML page that hosts Microsoft Web Chat and talks to your bot via Direct Line.
+    Use this URL as the contentUrl in your Teams personal tab manifest.
+    """
     try:
-        await adapter.process_activity(activity, auth_header, on_turn)
+        token = _create_directline_token()
     except Exception as e:
-        print(f"[BOT ERROR] {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        html = f"<pre style='padding:16px;font-family:system-ui'>Direct Line token error: {e}</pre>"
+        return HTMLResponse(html, status_code=500)
 
-    return Response(status_code=201)
+    html = f"""<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Operations Manual Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html, body, #webchat {{ height: 100%; width: 100%; margin: 0; padding: 0; }}
+      body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }}
+    </style>
+    <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+  </head>
+  <body>
+    <div id="webchat" role="main"></div>
+    <script>
+      (async function() {{
+        const token = "{token}";
+        window.WebChat.renderWebChat({{
+          directLine: window.WebChat.createDirectLine({{ token }})
+        }}, document.getElementById('webchat'));
+        document.querySelector('#webchat > *').focus();
+      }})();
+    </script>
+  </body>
+</html>"""
+    resp = HTMLResponse(html)
+    # Allow Teams to iframe this page
+    resp.headers["Content-Security-Policy"] = (
+        "frame-ancestors https://*.teams.microsoft.com https://*.skype.com https://*.teams.microsoft.us;"
+    )
+    # Make sure you are NOT setting X-Frame-Options: DENY/SAMEORIGIN anywhere
+    return resp
