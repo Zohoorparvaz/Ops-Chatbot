@@ -116,12 +116,15 @@ async def chat_with_bot(req: ChatRequest):
         return {"error": str(e)}
 
 # ---------- Bot Framework ----------
-MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID", "").strip()
-MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "").strip()
 
+import os
+from fastapi import Request, Response, HTTPException
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
-from fastapi import HTTPException
+
+# Read credentials
+MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID", "").strip()
+MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "").strip()
 
 adapter = None
 if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
@@ -133,18 +136,21 @@ if MICROSOFT_APP_ID and MICROSOFT_APP_PASSWORD:
 
     async def on_error(ctx: TurnContext, err: Exception):
         print(f"[BOT ERROR] {err}")
-        # Helpful for Web Chat/Direct Line diagnostics
         try:
-            await ctx.send_activity("Sorry—server error.")
+            await ctx.send_activity("Sorry — something went wrong.")
         except Exception:
             pass
     adapter.on_turn_error = on_error
 
     async def on_turn(turn_context: TurnContext):
         if turn_context.activity.type == ActivityTypes.message:
-            user_q = (turn_context.activity.text or "").strip()
-            ctx = retrieve_chunks_np(user_q)
-            ans = generate_answer_from_context(ctx, user_q)
+            try:
+                user_q = (turn_context.activity.text or "").strip()
+                ctx = retrieve_chunks_np(user_q)  # your retrieval function
+                ans = generate_answer_from_context(ctx, user_q)  # your generation function
+            except Exception as e:
+                print(f"[BOT ERROR] {e}")
+                ans = "Sorry — I ran into a problem processing that."
             await turn_context.send_activity(ans)
         else:
             await turn_context.send_activity(f"Received: {turn_context.activity.type}")
@@ -153,15 +159,20 @@ else:
 
 @app.post("/api/messages")
 async def messages(request: Request):
-    # This route always exists; if adapter is None we surface a clear 500
     if adapter is None:
         raise HTTPException(
             status_code=500,
             detail="Bot adapter not initialized. Check MICROSOFT_APP_ID / MICROSOFT_APP_PASSWORD."
         )
+
     body = await request.json()
     activity = Activity().deserialize(body)
     auth_header = request.headers.get("Authorization", "")
-    await adapter.process_activity(activity, auth_header, on_turn)
-    return Response(status_code=201)
 
+    try:
+        await adapter.process_activity(activity, auth_header, on_turn)
+    except Exception as e:
+        print(f"[BOT ERROR] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return Response(status_code=201)
