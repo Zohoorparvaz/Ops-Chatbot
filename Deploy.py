@@ -117,63 +117,64 @@ async def chat_with_bot(req: ChatRequest):
 
 # ---------- Bot Framework ----------
 
-# ---------- Teams Personal Tab page (/teams) ----------
-import requests
 from fastapi.responses import HTMLResponse
-
-DIRECTLINE_SECRET = os.getenv("DIRECTLINE_SECRET", "").strip()  # set in App Service > Configuration
-
-def _create_directline_token():
-    if not DIRECTLINE_SECRET:
-        raise RuntimeError("DIRECTLINE_SECRET not set in environment.")
-    r = requests.post(
-        "https://directline.botframework.com/v3/directline/tokens/generate",
-        headers={"Authorization": f"Bearer {DIRECTLINE_SECRET}"}
-    )
-    r.raise_for_status()
-    return r.json()["token"]
 
 @app.get("/teams")
 def teams_tab():
-    """
-    HTML page that hosts Microsoft Web Chat and talks to your bot via Direct Line.
-    Use this URL as the contentUrl in your Teams personal tab manifest.
-    """
-    try:
-        token = _create_directline_token()
-    except Exception as e:
-        html = f"<pre style='padding:16px;font-family:system-ui'>Direct Line token error: {e}</pre>"
-        return HTMLResponse(html, status_code=500)
-
-    html = f"""<!doctype html>
+    html = """<!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Operations Manual Chat</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html, body, #webchat {{ height: 100%; width: 100%; margin: 0; padding: 0; }}
-      body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }}
-    </style>
-    <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
-  </head>
-  <body>
-    <div id="webchat" role="main"></div>
-    <script>
-      (async function() {{
-        const token = "{token}";
-        window.WebChat.renderWebChat({{
-          directLine: window.WebChat.createDirectLine({{ token }})
-        }}, document.getElementById('webchat'));
-        document.querySelector('#webchat > *').focus();
-      }})();
-    </script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <title>Operations Manual Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height:100%; margin:0; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding:16px; }
+    #log { height:60vh; overflow:auto; border:1px solid #e5e7eb; padding:10px; border-radius:8px; }
+    #row { margin-top:10px; display:flex; gap:8px; }
+    #q { flex:1; padding:8px; }
+    button { padding:8px 12px; }
+    .you { font-weight:600; margin-top:8px; }
+    .bot { margin:4px 0 12px 0; white-space:pre-wrap; }
+  </style>
+</head>
+<body>
+  <h3>Operations Manual Assistant</h3>
+  <div id="log"></div>
+  <div id="row">
+    <input id="q" placeholder="Ask a question..." onkeydown="if(event.key==='Enter') send()" />
+    <button onclick="send()">Send</button>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    async function send() {
+      const inp = document.getElementById('q');
+      const q = inp.value.trim();
+      if (!q) return;
+      inp.value = '';
+      log.insertAdjacentHTML('beforeend', `<div class="you">You:</div><div>${q}</div>`);
+      log.scrollTop = log.scrollHeight;
+
+      try {
+        const r = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q })
+        });
+        const j = await r.json();
+        const a = j.answer || j.error || '(no answer)';
+        log.insertAdjacentHTML('beforeend', `<div class="you">Assistant:</div><div class="bot">${a}</div>`);
+        log.scrollTop = log.scrollHeight;
+      } catch (e) {
+        log.insertAdjacentHTML('beforeend', `<div style="color:#b91c1c">Error: ${e}</div>`);
+      }
+    }
+  </script>
+</body>
 </html>"""
     resp = HTMLResponse(html)
-    # Allow Teams to iframe this page
     resp.headers["Content-Security-Policy"] = (
-        "frame-ancestors https://*.teams.microsoft.com https://*.skype.com https://*.teams.microsoft.us;"
+      "frame-ancestors https://*.teams.microsoft.com https://*.skype.com https://*.teams.microsoft.us;"
     )
-    # Make sure you are NOT setting X-Frame-Options: DENY/SAMEORIGIN anywhere
     return resp
