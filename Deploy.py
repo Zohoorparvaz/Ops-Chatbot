@@ -256,8 +256,35 @@ def teams_tab():
     sendBtn.addEventListener('click', send);
 
     // Seed example messages so you can judge the look immediately
-    addMsg('you', _escape('How do I submit a shop drawing?'));
-    addMsg('bot', renderAnswer('**Here are key sections:**\\n- Safety → <https://example.com/policy>\\n- Project Planning → WBS\\n- Change Control → RFC form'));
+    addMsg('bot', renderAnswer(`**Key sections available in the Operations Manual:**  
+
+- SAFETY  
+- COMPANY ORGANIZATION  
+- PROJECT PLANNING  
+- OWNER CONTRACT REVIEW AND TYPES  
+- CONTRACT INSURANCE AND BONDING  
+- PERMITS AND LICENSES  
+- PROJECT FILING SYSTEM  
+- CONTRACT DRAWINGS AND SPECIFICATIONS  
+- SUBCONTRACTING  
+- PRODUCT PURCHASING  
+- SHOP DRAWINGS AND SUBMITTALS  
+- SCHEDULING  
+- COST CONTROL  
+- CHANGE CONTROL  
+- PROGRESS APPLICATIONS  
+- PROFIT LOSS REPORTING  
+- EMPLOYEE HIRING, LAYOFF & REPORTING  
+- LABOUR RELATIONS  
+- QUALITY CONTROL  
+- GENERAL PROJECT ADMINISTRATION  
+- PROJECT TURNOVER AND CLOSEOUT PROCEDURES  
+- CONSTRUCTION ENGINEERING  
+- CONSTRUCTION MANAGEMENT  
+- DESIGN-BUILD CONSTRUCTION  
+- ENVIRONMENTAL  
+- DELAYS AND CLAIMS  
+- EMERGENCY PROCEDURES AND PUBLICITY`));
   </script>
 </body>
 </html>"""
