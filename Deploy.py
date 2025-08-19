@@ -135,25 +135,52 @@ def teams_tab():
     #q { flex:1; padding:8px; }
     button { padding:8px 12px; }
     .you { font-weight:600; margin-top:8px; }
-    .bot { margin:4px 0 12px 0; white-space:pre-wrap; }
+    .bot { margin:4px 0 12px 0; white-space:pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
+    .bot a { text-decoration: underline; }
   </style>
 </head>
 <body>
   <h3>Operations Manual Assistant</h3>
   <div id="log"></div>
   <div id="row">
-    <input id="q" placeholder="Ask a question..." onkeydown="if(event.key==='Enter') send()" />
-    <button onclick="send()">Send</button>
+    <input id="q" placeholder="Ask a question..." />
+    <button id="sendBtn">Send</button>
   </div>
 
   <script>
     const log = document.getElementById('log');
+    const input = document.getElementById('q');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Escape HTML to avoid XSS, then convert markdown links and bare URLs to <a>
+    const _escape = s => s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+    function linkify(text) {
+      const escaped = _escape(text);
+
+      // Markdown links: [label](https://example.com)
+      const mdLinked = escaped.replace(
+        /\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
+        (_, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      );
+
+      // Bare URLs
+      const urlRegex = /\\bhttps?:\\/\\/[^\\s<>"')]+/g;
+      return mdLinked.replace(urlRegex, url =>
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+      );
+    }
+
     async function send() {
-      const inp = document.getElementById('q');
-      const q = inp.value.trim();
+      const q = input.value.trim();
       if (!q) return;
-      inp.value = '';
-      log.insertAdjacentHTML('beforeend', `<div class="you">You:</div><div>${q}</div>`);
+      input.value = '';
+      log.insertAdjacentHTML('beforeend', `<div class="you">You:</div><div>${_escape(q)}</div>`);
       log.scrollTop = log.scrollHeight;
 
       try {
@@ -164,17 +191,29 @@ def teams_tab():
         });
         const j = await r.json();
         const a = j.answer || j.error || '(no answer)';
-        log.insertAdjacentHTML('beforeend', `<div class="you">Assistant:</div><div class="bot">${a}</div>`);
+        log.insertAdjacentHTML('beforeend', `<div class="you">Assistant:</div><div class="bot">${linkify(a)}</div>`);
         log.scrollTop = log.scrollHeight;
       } catch (e) {
-        log.insertAdjacentHTML('beforeend', `<div style="color:#b91c1c">Error: ${e}</div>`);
+        log.insertAdjacentHTML('beforeend', `<div style="color:#b91c1c">Error: ${_escape(String(e))}</div>`);
       }
     }
+
+    // Enter key + button click
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    sendBtn.addEventListener('click', send);
   </script>
 </body>
 </html>"""
     resp = HTMLResponse(html)
     resp.headers["Content-Security-Policy"] = (
-      "frame-ancestors https://*.teams.microsoft.com https://*.skype.com https://*.teams.microsoft.us;"
+        # Allow Teams to embed this page
+        "frame-ancestors https://teams.microsoft.com https://*.teams.microsoft.com https://*.office.com https://*.microsoft.com; "
+        # Allow same-origin resources + inline script/style for this simple page
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src  'self' 'unsafe-inline'; "
+        "img-src    'self' data: blob:; "
+        "connect-src 'self';"
     )
     return resp
+
