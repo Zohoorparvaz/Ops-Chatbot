@@ -147,12 +147,16 @@ def teams_tab():
     <button id="sendBtn">Send</button>
   </div>
 
+  <!-- Markdown renderer + sanitizer -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/dompurify@3.1.6/dist/purify.min.js"></script>
+
   <script>
     const log = document.getElementById('log');
     const input = document.getElementById('q');
     const sendBtn = document.getElementById('sendBtn');
 
-    // Escape HTML to avoid XSS
+    // Escape ONLY user-typed echoes (we don't escape assistant Markdown before rendering)
     const _escape = s => String(s)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -160,46 +164,25 @@ def teams_tab():
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
-    // Normalize backend quirks into Markdown BEFORE escaping/linkifying
-    function _normalizeToMarkdown(text) {
-      let t = String(text);
+    // Turn bare URLs into Markdown-compatible links (<https://...>)
+    const autolink = s => String(s).replace(/\bhttps?:\/\/[^\s<>"')]+/g, u => `<${u}>`);
 
-      // 1) Full HTML anchors -> Markdown: <a href="URL">Label</a> => [Label](URL)
-      t = t.replace(
-        /<a\\b[^>]*?href="(https?:\\/\\/[^"]+)"[^>]*?>([\\s\\S]*?)<\\/a>/gi,
-        (_m, url, label) => `[${label.trim()}](${url})`
-      );
-
-      // 2) Broken pattern: URL" ... >Label   (allow any attrs/whitespace/newlines)
-      //    e.g.: https://...pdf" target="_blank" rel="noopener noreferrer">Critical ...
-      t = t.replace(
-        /(https?:\\/\\/\\S+)"\\s+[^>]*>([^<\\n\\r]+)/gi,
-        (_m, url, label) => `[${label.trim()}](${url})`
-      );
-
-      // 3) Remove any stray closing </a>
-      t = t.replace(/<\\/a>/gi, "");
-
-      return t;
-    }
-
-    // Convert Markdown links + bare URLs into safe <a> tags
-    function linkify(text) {
-      const normalized = _normalizeToMarkdown(text);       // fix/convert to Markdown
-      const escaped = _escape(normalized);                 // escape everything
-
-      // Markdown [label](url) -> clickable label-only link
-      const mdLinked = escaped.replace(
-        /\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
-        (_m, label, url) =>
-          `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
-      );
-
-      // Bare URLs -> clickable (URL text as label)
-      const urlRegex = /\\bhttps?:\\/\\/[^\\s<>"')]+/g;
-      return mdLinked.replace(urlRegex, url =>
-        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
-      );
+    // Render assistant text (Markdown -> HTML) safely
+    function renderAnswer(raw) {
+      const withAuto = autolink(raw ?? "");
+      const html = marked.parse(withAuto, { breaks: true });
+      const clean = DOMPurify.sanitize(html, {
+        ALLOWED_TAGS: ['a','p','ul','ol','li','strong','em','code','pre','br','h1','h2','h3','h4','h5','h6','blockquote'],
+        ALLOWED_ATTR: ['href','target','rel']
+      });
+      // Force links to open safely in new tabs
+      const div = document.createElement('div');
+      div.innerHTML = clean;
+      div.querySelectorAll('a[href]').forEach(a => {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      });
+      return div.innerHTML;
     }
 
     async function send() {
@@ -217,9 +200,11 @@ def teams_tab():
         });
         const j = await r.json();
         const a = j.answer || j.error || '(no answer)';
+
+        const safeHtml = renderAnswer(a);
         log.insertAdjacentHTML(
           'beforeend',
-          `<div class="you">Assistant:</div><div class="bot">${linkify(a)}</div>`
+          `<div class="you">Assistant:</div><div class="bot">${safeHtml}</div>`
         );
         log.scrollTop = log.scrollHeight;
       } catch (e) {
@@ -233,14 +218,14 @@ def teams_tab():
 </body>
 </html>"""
     resp = HTMLResponse(html)
+    # Allow the CDNs for marked + DOMPurify
     resp.headers["Content-Security-Policy"] = (
         "frame-ancestors https://teams.microsoft.com https://*.teams.microsoft.com "
         "https://*.office.com https://*.microsoft.com; "
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
         "style-src  'self' 'unsafe-inline'; "
         "img-src    'self' data: blob:; "
         "connect-src 'self';"
     )
     return resp
-
