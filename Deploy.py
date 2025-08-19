@@ -133,10 +133,10 @@ def teams_tab():
     #log { height:60vh; overflow:auto; border:1px solid #e5e7eb; padding:10px; border-radius:8px; }
     #row { margin-top:10px; display:flex; gap:8px; }
     #q { flex:1; padding:8px; }
-    button { padding:8px 12px; }
+    button { padding:8px 12px; cursor: pointer; }
     .you { font-weight:600; margin-top:8px; }
     .bot { margin:4px 0 12px 0; white-space:pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
-    .bot a { text-decoration: underline; }
+    .bot a { color:#2563eb; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -152,28 +152,38 @@ def teams_tab():
     const input = document.getElementById('q');
     const sendBtn = document.getElementById('sendBtn');
 
-    // Escape HTML to avoid XSS, then convert markdown links and bare URLs to <a>
-    const _escape = s => s
+    // Escape HTML to avoid XSS
+    const _escape = s => String(s)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
+    // Remove a stray trailing quote on bare URLs like ...pdf"
+    function _trimStrayQuote(url) {
+      return /https?:\\/\\/\\S+["”]$/.test(url) ? url.slice(0, -1) : url;
+    }
+
+    // Convert Markdown links + bare URLs into <a>
     function linkify(text) {
       const escaped = _escape(text);
 
       // Markdown links: [label](https://example.com)
       const mdLinked = escaped.replace(
         /\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
-        (_, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
+        (_, label, url) => {
+          const clean = _trimStrayQuote(url);
+          return `<a href="${clean}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+        }
       );
 
       // Bare URLs
       const urlRegex = /\\bhttps?:\\/\\/[^\\s<>"')]+/g;
-      return mdLinked.replace(urlRegex, url =>
-        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
-      );
+      return mdLinked.replace(urlRegex, (url) => {
+        const clean = _trimStrayQuote(url);
+        return `<a href="${clean}" target="_blank" rel="noopener noreferrer">${clean}</a>`;
+      });
     }
 
     async function send() {
@@ -191,7 +201,10 @@ def teams_tab():
         });
         const j = await r.json();
         const a = j.answer || j.error || '(no answer)';
-        log.insertAdjacentHTML('beforeend', `<div class="you">Assistant:</div><div class="bot">${linkify(a)}</div>`);
+        log.insertAdjacentHTML(
+          'beforeend',
+          `<div class="you">Assistant:</div><div class="bot">${linkify(a)}</div>`
+        );
         log.scrollTop = log.scrollHeight;
       } catch (e) {
         log.insertAdjacentHTML('beforeend', `<div style="color:#b91c1c">Error: ${_escape(String(e))}</div>`);
@@ -216,4 +229,3 @@ def teams_tab():
         "connect-src 'self';"
     )
     return resp
-
