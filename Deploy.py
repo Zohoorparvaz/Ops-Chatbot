@@ -117,7 +117,15 @@ async def chat_with_bot(req: ChatRequest):
 
 # ---------- Bot Framework ----------
 
-from fastapi.responses import HTMLResponse
+from pathlib import Path
+from fastapi.responses import HTMLResponse, FileResponse
+
+LOGO_PATH = Path(__file__).parent / "bird-logo-RGB.jpg"
+
+@app.get("/logo")
+def logo():
+    # Serves the logo file directly (no static folder required)
+    return FileResponse(LOGO_PATH, media_type="image/jpeg")
 
 @app.get("/teams")
 def teams_tab():
@@ -125,23 +133,47 @@ def teams_tab():
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Operations Manual Chat</title>
+  <title>Operations Manual Chat — Preview</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    html, body { height:100%; margin:0; }
+    html, body { height:100%; margin:0; background:#fff; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding:16px; }
-    #log { height:60vh; overflow:auto; border:1px solid #e5e7eb; padding:10px; border-radius:8px; }
+
+    /* Brand header */
+    .brand { display:flex; align-items:center; gap:12px; margin:0 0 12px; }
+    .brand img { height:36px; width:auto; display:block; }
+    .brand h3 { margin:0; line-height:1.2; }
+    .brand small { color:#6b7280; font-weight:500; }
+
+    #log { height:60vh; overflow:auto; border:1px solid #e5e7eb; padding:12px; border-radius:10px; background:#fafafa; }
     #row { margin-top:10px; display:flex; gap:8px; }
-    #q { flex:1; padding:8px; }
-    button { padding:8px 12px; cursor: pointer; }
-    .you { font-weight:600; margin-top:8px; }
-    .bot { margin:4px 0 12px 0; white-space:pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
-    .bot a { color:#2563eb; text-decoration: underline; }
+    #q { flex:1; padding:10px; border:1px solid #e5e7eb; border-radius:8px; }
+    button { padding:10px 14px; cursor:pointer; border:0; border-radius:10px; background:#2563eb; color:white; }
+
+    .msg { display:flex; gap:8px; margin:10px 0; align-items:flex-start; }
+    .avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; color:white; overflow:hidden; }
+    .avatar.you { background:#6b7280; }
+    .avatar.bot { background:#2563eb; }  /* solid color circle for A */
+    .bubble { max-width:720px; padding:10px 12px; border-radius:14px; }
+    .bubble.you { background:#e5e7eb; }
+    .bubble.bot { background:#eef2ff; }
+    .bubble .meta { font-size:12px; color:#6b7280; margin-bottom:4px; }
+
+    .bot a { color:#2563eb; text-decoration:underline; }
   </style>
 </head>
 <body>
-  <h3>Operations Manual Assistant</h3>
+  <!-- Brand header with Bird logo (served from /logo) -->
+  <div class="brand">
+    <img src="/logo" alt="Bird logo" onerror="this.style.display='none'">
+    <div>
+      <h3>Operations Manual Assistant</h3>
+      <small>Preview</small>
+    </div>
+  </div>
+
   <div id="log"></div>
+
   <div id="row">
     <input id="q" placeholder="Ask a question..." />
     <button id="sendBtn">Send</button>
@@ -165,7 +197,7 @@ def teams_tab():
       .replace(/'/g, "&#39;");
 
     // Turn bare URLs into Markdown-compatible links (<https://...>)
-    const autolink = s => String(s).replace(/\bhttps?:\/\/[^\s<>"')]+/g, u => `<${u}>`);
+    const autolink = s => String(s).replace(/\\bhttps?:\\/\\/[^\\s<>"')]+/g, u => `<${u}>`);
 
     // Render assistant text (Markdown -> HTML) safely
     function renderAnswer(raw) {
@@ -175,7 +207,6 @@ def teams_tab():
         ALLOWED_TAGS: ['a','p','ul','ol','li','strong','em','code','pre','br','h1','h2','h3','h4','h5','h6','blockquote'],
         ALLOWED_ATTR: ['href','target','rel']
       });
-      // Force links to open safely in new tabs
       const div = document.createElement('div');
       div.innerHTML = clean;
       div.querySelectorAll('a[href]').forEach(a => {
@@ -185,12 +216,27 @@ def teams_tab():
       return div.innerHTML;
     }
 
+    function addMsg(role, html) {
+      const isYou = role === 'you';
+      const avatarHTML = isYou ? 'Y' : 'A';
+      const msg = document.createElement('div');
+      msg.className = 'msg';
+      msg.innerHTML = [
+        '<div class="avatar ', (isYou ? 'you' : 'bot'), '">', avatarHTML, '</div>',
+        '<div class="bubble ', (isYou ? 'you' : 'bot'), '">',
+          '<div class="meta">', (isYou ? 'You' : 'Assistant'), '</div>',
+          '<div class="', (isYou ? '' : 'bot'), '">', html, '</div>',
+        '</div>'
+      ].join('');
+      log.appendChild(msg);
+      log.scrollTop = log.scrollHeight;
+    }
+
     async function send() {
       const q = input.value.trim();
       if (!q) return;
       input.value = '';
-      log.insertAdjacentHTML('beforeend', `<div class="you">You:</div><div>${_escape(q)}</div>`);
-      log.scrollTop = log.scrollHeight;
+      addMsg('you', _escape(q));
 
       try {
         const r = await fetch('/chat', {
@@ -200,25 +246,23 @@ def teams_tab():
         });
         const j = await r.json();
         const a = j.answer || j.error || '(no answer)';
-
-        const safeHtml = renderAnswer(a);
-        log.insertAdjacentHTML(
-          'beforeend',
-          `<div class="you">Assistant:</div><div class="bot">${safeHtml}</div>`
-        );
-        log.scrollTop = log.scrollHeight;
+        addMsg('bot', renderAnswer(a));
       } catch (e) {
-        log.insertAdjacentHTML('beforeend', `<div style="color:#b91c1c">Error: ${_escape(String(e))}</div>`);
+        addMsg('bot', '<span style="color:#b91c1c">Error: ' + _escape(String(e)) + '</span>');
       }
     }
 
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
     sendBtn.addEventListener('click', send);
+
+    // Seed example messages so you can judge the look immediately
+    addMsg('you', _escape('How do I submit a shop drawing?'));
+    addMsg('bot', renderAnswer('**Here are key sections:**\\n- Safety → <https://example.com/policy>\\n- Project Planning → WBS\\n- Change Control → RFC form'));
   </script>
 </body>
 </html>"""
     resp = HTMLResponse(html)
-    # Allow the CDNs for marked + DOMPurify
+    # Allow the CDNs for marked + DOMPurify; allow Teams to frame it.
     resp.headers["Content-Security-Policy"] = (
         "frame-ancestors https://teams.microsoft.com https://*.teams.microsoft.com "
         "https://*.office.com https://*.microsoft.com; "
@@ -229,3 +273,5 @@ def teams_tab():
         "connect-src 'self';"
     )
     return resp
+
+
