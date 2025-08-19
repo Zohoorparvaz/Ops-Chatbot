@@ -160,30 +160,48 @@ def teams_tab():
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
-    // Remove a stray trailing quote on bare URLs like ...pdf"
-    function _trimStrayQuote(url) {
-      return /https?:\\/\\/\\S+["”]$/.test(url) ? url.slice(0, -1) : url;
-    }
+    // Normalize backend quirks into Markdown before escaping/linkifying
+    function _normalizeToMarkdown(text) {
+      let t = String(text);
 
-    // Convert Markdown links + bare URLs into <a>
-    function linkify(text) {
-      const escaped = _escape(text);
-
-      // Markdown links: [label](https://example.com)
-      const mdLinked = escaped.replace(
-        /\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
-        (_, label, url) => {
-          const clean = _trimStrayQuote(url);
-          return `<a href="${clean}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-        }
+      // 1) Full HTML anchors -> Markdown: <a href="URL">Label</a> => [Label](URL)
+      t = t.replace(
+        /<a\\b[^>]*href="(https?:\\/\\/[^"]+)"[^>]*>(.*?)<\\/a>/gi,
+        (_m, url, label) => `[${label}](${url})`
       );
 
-      // Bare URLs
+      // 2) Broken pattern: URL" target="_blank" ... >Label  =>  [Label](URL)
+      t = t.replace(
+        /(https?:\\/\\/\\S+)"\\s+target="_blank"[^>]*>([^<]+)/gi,
+        (_m, url, label) => `[${label}](${url})`
+      );
+
+      // 3) Remove any stray closing </a>
+      t = t.replace(/<\\/a>/gi, "");
+
+      return t;
+    }
+
+    // Convert Markdown links + bare URLs into safe <a>
+    function linkify(text) {
+      // First normalize HTML/broken anchors to Markdown
+      const normalized = _normalizeToMarkdown(text);
+
+      // Escape everything so only our links get injected
+      const escaped = _escape(normalized);
+
+      // Markdown [label](url) -> clickable
+      const mdLinked = escaped.replace(
+        /\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
+        (_m, label, url) =>
+          `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      );
+
+      // Bare URLs -> clickable
       const urlRegex = /\\bhttps?:\\/\\/[^\\s<>"')]+/g;
-      return mdLinked.replace(urlRegex, (url) => {
-        const clean = _trimStrayQuote(url);
-        return `<a href="${clean}" target="_blank" rel="noopener noreferrer">${clean}</a>`;
-      });
+      return mdLinked.replace(urlRegex, url =>
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+      );
     }
 
     async function send() {
