@@ -160,20 +160,21 @@ def teams_tab():
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
-    // Normalize backend quirks into Markdown before escaping/linkifying
+    // Normalize backend quirks into Markdown BEFORE escaping/linkifying
     function _normalizeToMarkdown(text) {
       let t = String(text);
 
       // 1) Full HTML anchors -> Markdown: <a href="URL">Label</a> => [Label](URL)
       t = t.replace(
-        /<a\\b[^>]*href="(https?:\\/\\/[^"]+)"[^>]*>(.*?)<\\/a>/gi,
-        (_m, url, label) => `[${label}](${url})`
+        /<a\\b[^>]*?href="(https?:\\/\\/[^"]+)"[^>]*?>([\\s\\S]*?)<\\/a>/gi,
+        (_m, url, label) => `[${label.trim()}](${url})`
       );
 
-      // 2) Broken pattern: URL" target="_blank" ... >Label  =>  [Label](URL)
+      // 2) Broken pattern: URL" ... >Label   (allow any attrs/whitespace/newlines)
+      //    e.g.: https://...pdf" target="_blank" rel="noopener noreferrer">Critical ...
       t = t.replace(
-        /(https?:\\/\\/\\S+)"\\s+target="_blank"[^>]*>([^<]+)/gi,
-        (_m, url, label) => `[${label}](${url})`
+        /(https?:\\/\\/\\S+)"\\s+[^>]*>([^<\\n\\r]+)/gi,
+        (_m, url, label) => `[${label.trim()}](${url})`
       );
 
       // 3) Remove any stray closing </a>
@@ -182,22 +183,19 @@ def teams_tab():
       return t;
     }
 
-    // Convert Markdown links + bare URLs into safe <a>
+    // Convert Markdown links + bare URLs into safe <a> tags
     function linkify(text) {
-      // First normalize HTML/broken anchors to Markdown
-      const normalized = _normalizeToMarkdown(text);
+      const normalized = _normalizeToMarkdown(text);       // fix/convert to Markdown
+      const escaped = _escape(normalized);                 // escape everything
 
-      // Escape everything so only our links get injected
-      const escaped = _escape(normalized);
-
-      // Markdown [label](url) -> clickable
+      // Markdown [label](url) -> clickable label-only link
       const mdLinked = escaped.replace(
         /\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
         (_m, label, url) =>
           `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
       );
 
-      // Bare URLs -> clickable
+      // Bare URLs -> clickable (URL text as label)
       const urlRegex = /\\bhttps?:\\/\\/[^\\s<>"')]+/g;
       return mdLinked.replace(urlRegex, url =>
         `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
@@ -229,7 +227,6 @@ def teams_tab():
       }
     }
 
-    // Enter key + button click
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
     sendBtn.addEventListener('click', send);
   </script>
@@ -237,9 +234,8 @@ def teams_tab():
 </html>"""
     resp = HTMLResponse(html)
     resp.headers["Content-Security-Policy"] = (
-        # Allow Teams to embed this page
-        "frame-ancestors https://teams.microsoft.com https://*.teams.microsoft.com https://*.office.com https://*.microsoft.com; "
-        # Allow same-origin resources + inline script/style for this simple page
+        "frame-ancestors https://teams.microsoft.com https://*.teams.microsoft.com "
+        "https://*.office.com https://*.microsoft.com; "
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src  'self' 'unsafe-inline'; "
@@ -247,3 +243,4 @@ def teams_tab():
         "connect-src 'self';"
     )
     return resp
+
