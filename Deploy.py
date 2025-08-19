@@ -256,7 +256,9 @@ def teams_tab():
     sendBtn.addEventListener('click', send);
 
     // Seed example messages so you can judge the look immediately
-    addMsg('bot', renderAnswer(`**Key sections available in the Operations Manual:**  
+    addMsg('bot', renderAnswer(`Hi, I am your assistant — ask me anything about the Operations Manual.  
+
+**Key sections available in the Operations Manual:**  
 
 - SAFETY  
 - COMPANY ORGANIZATION  
