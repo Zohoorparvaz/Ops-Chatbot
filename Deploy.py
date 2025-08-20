@@ -76,9 +76,8 @@ Your job:
 1. Summarize the relevant information clearly.
 2. If any forms, section numbers, or document titles are mentioned in the context, and they appear to have associated links, include them using Markdown hyperlinks that are present in the context.
 3. Do not make up links.
-4. Organize your answer using clear bullet points or numbers.
-5. Prioritize helping the user find what to click on to take action.
-6. Display all sections and topics that you retrieve (e.g., Safety, Project Planning, Change Control).
+4. Prioritize helping the user find what to click on to take action.
+
 
 Context:
 {context}
