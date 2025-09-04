@@ -112,7 +112,9 @@ async def chat_with_bot(req: ChatRequest):
         answer = generate_answer_from_context(context, req.question)
         return {"answer": answer}
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        print(traceback.format_exc())
+        return {"error": "Internal error. Please try again later."}
 
 # ---------- Bot Framework ----------
 
