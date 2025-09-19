@@ -260,7 +260,7 @@ def teams_tab():
     addMsg('bot', renderAnswer(`Hi, I am your assistant — ask me anything about the Operations Manual.  
 
 **Key sections available in the Operations Manual:**  
-(The Operations Manual is under review for some major changes and updates. Please visit me back after the release to see the updated results for your prompts as well.)
+(The Operations Manual is under review for some major changes and updates. Please visit me back after the release to see the updated results for your prompts as well.)  
 
 02 - SAFETY  
 03 - COMPANY ORGANIZATION  
