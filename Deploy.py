@@ -258,7 +258,9 @@ def teams_tab():
 
     // Seed example messages so you can judge the look immediately
     addMsg('bot', renderAnswer(`Hi, I am your assistant — ask me anything about the Operations Manual.  
-*(The Operations Manual is under review for some major changes and updates. Please visit me back after the release to see the updated results for your prompts as well.)  
+
+>*(The Operations Manual is under review for some major changes and updates. Please visit me back after the release to see the updated results for your prompts as well.)*>  
+
 **Key sections available in the Operations Manual:**  
 
 02 - SAFETY  
