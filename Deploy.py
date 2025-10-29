@@ -134,7 +134,7 @@ def teams_tab():
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Operations Manual Chat — Preview</title>
+  <title>Operations Manual Chat</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     html, body { height:100%; margin:0; background:#fff; }
@@ -169,7 +169,7 @@ def teams_tab():
     <img src="/logo" alt="Bird logo" onerror="this.style.display='none'">
     <div>
       <h3>Operations Manual Assistant</h3>
-      <small>Preview</small>
+      # <small>Preview</small>
     </div>
   </div>
 
