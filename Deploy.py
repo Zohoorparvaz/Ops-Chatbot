@@ -169,7 +169,7 @@ def teams_tab():
     <img src="/logo" alt="Bird logo" onerror="this.style.display='none'">
     <div>
       <h3>Operations Manual Assistant</h3>
-      # <small>Preview</small>
+      <!--<small>Preview</small>-->
     </div>
   </div>
 
@@ -259,7 +259,7 @@ def teams_tab():
     // Seed example messages so you can judge the look immediately
     addMsg('bot', renderAnswer(`Hi, I am your assistant — ask me anything about the Operations Manual.  
 
-# _Note: The Operations Manual is under review for some major changes and updates. Please visit me back after the release to see the updated results for your prompts as well.)_  
+<!--_Note: The Operations Manual is under review for some major changes and updates. Please visit me back after the release to see the updated results for your prompts as well.)_-->  
 
 **Key sections available in the Operations Manual:**  
 
