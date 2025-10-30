@@ -259,7 +259,7 @@ def teams_tab():
     // Seed example messages so you can judge the look immediately
     addMsg('bot', renderAnswer(`Hi, I am your assistant — ask me anything about the Operations Manual.  
 
-<!--_Note: The bot is being updated with the new material at this time._  -->
+_Note: The bot is being updated with the new material at this time._  
 
 **Key sections available in the Operations Manual:**  
 
