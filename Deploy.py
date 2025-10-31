@@ -32,7 +32,7 @@ def ensure_loaded():
     text_chunks = tc
 
 # ---------- Azure OpenAI ----------
-EMBEDDING_MODEL = os.getenv("AOAI_EMBED_DEPLOY", "text-embedding-3-large")
+EMBEDDING_MODEL = os.getenv("AOAI_EMBED_DEPLOY", "text-embedding-3-small")
 CHAT_MODEL      = os.getenv("AOAI_CHAT_DEPLOY",  "o4-mini")  # must match your Deployment name
 
 def get_client() -> AzureOpenAI:
@@ -123,11 +123,11 @@ async def chat_with_bot(req: ChatRequest):
         answer = generate_answer_from_context(context, req.question)
         return {"answer": answer}
     except Exception as e:
-        # print(traceback.format_exc())
-        # return {"error": "Internal error. Please try again later."}
         tb = traceback.format_exc()
-        print("❌ Chat error:\n", tb, flush=True)
-        return {"error": f"{type(e).__name__}: {str(e)}"}
+        print(tb)
+        # print("❌ Chat error:\n", tb, flush=True)
+        # return {"error": f"{type(e).__name__}: {str(e)}"}
+        return {"error": "Internal error. Please try again later."}
 
 
 # ---------- Bot Framework ----------
