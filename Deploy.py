@@ -32,7 +32,7 @@ def ensure_loaded():
     text_chunks = tc
 
 # ---------- Azure OpenAI ----------
-EMBEDDING_MODEL = os.getenv("AOAI_EMBED_DEPLOY", "text-embedding-3-small")
+EMBEDDING_MODEL = os.getenv("AOAI_EMBED_DEPLOY", "text-embedding-3-large")
 CHAT_MODEL      = os.getenv("AOAI_CHAT_DEPLOY",  "o4-mini")  # must match your Deployment name
 
 def get_client() -> AzureOpenAI:
