@@ -122,9 +122,14 @@ async def chat_with_bot(req: ChatRequest):
         context = retrieve_chunks_np(req.question)
         answer = generate_answer_from_context(context, req.question)
         return {"answer": answer}
-    except Exception as e:
-        print(traceback.format_exc())
-        return {"error": "Internal error. Please try again later."}
+    # except Exception as e:
+        # print(traceback.format_exc())
+        # return {"error": "Internal error. Please try again later."}
+      except Exception as e:
+        tb = traceback.format_exc()
+        print("❌ Chat error:\n", tb, flush=True)
+        return {"error": f"{type(e).__name__}: {str(e)}"}
+
 
 # ---------- Bot Framework ----------
 
