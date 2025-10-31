@@ -106,6 +106,16 @@ Answer:
         del chat_log[:-50]
     return answer
 
+@app.get("/debug")
+async def debug_env():
+    return {
+        "AZURE_OPENAI_API_KEY_set": bool(os.getenv("AZURE_OPENAI_API_KEY")),
+        "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT"),
+        "AOAI_EMBED_DEPLOY": os.getenv("AOAI_EMBED_DEPLOY"),
+        "AOAI_CHAT_DEPLOY": os.getenv("AOAI_CHAT_DEPLOY"),
+        "files": [str(p) for p in Path("/home/site/wwwroot").glob("*.pkl")]
+    }
+
 @app.post("/chat")
 async def chat_with_bot(req: ChatRequest):
     try:
